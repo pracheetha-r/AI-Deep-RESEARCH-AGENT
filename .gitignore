@@ -1,0 +1,27 @@
+# Environment variables and local secrets
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.envvenv/
+pip-wheel-metadata/
+*.egg-info/
+build/
+dist/
+
+# Streamlit
+.streamlit/cache/
+
+# Local tooling and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,61 +1,69 @@
 import streamlit as st
-import requests
+import time
+# 1. We import the render functions from the modules we created
+from login import render_login_page, render_verification_loader
+from dashboard import render_dashboard
 
+# --- PAGE CONFIG ---
 st.set_page_config(page_title="AI Research Assistant", page_icon="🔬", layout="wide")
 
 API_URL = "http://localhost:8000"
 
+# --- SESSION STATE INITIALIZATION ---
+# Keeps track of whether a user has successfully signed in
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+if "user" not in st.session_state:
+    st.session_state["user"] = None
 
-def call_api(topic):
-    try:
-        response = requests.post(
-            f"{API_URL}/research",
-            json={"topic": topic},
-            timeout=60
-        )
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.ConnectionError:
-        st.error("Backend not running. Start it with: uvicorn api.main:app --reload")
-        return None
-    except Exception as e:
-        st.error(f"Error: {e}")
-        return None
+# --- OAUTH CONFIGURATION ---
+# Check for client configuration settings
+GOOGLE_CLIENT_ID = st.secrets.get("GOOGLE_CLIENT_ID", None)
+REDIRECT_URI = "http://localhost:8501/" # Redirect target back to Streamlit app
 
+# --- STEP 1: INTERCEPT AUTH REDIRECT (QUERY PARAMETERS) ---
+# When Google redirects back to your app, it will append '?code=xxx'
+query_params = st.query_params
+if "code" in query_params:
+    auth_code = query_params["code"]
+    
+    # 2. Render intermediate security handshake screen
+    render_verification_loader()
+    
+    with st.spinner("Establishing secure session..."):
+        time.sleep(1.8) # Simulate token exchange delay
+        
+        # When your backend OAuth route is ready, exchange the auth code here:
+        # response = requests.post(f"{API_URL}/auth/google", json={"code": auth_code})
+        
+        # Standalone mode: securely mock the validated user details
+        st.session_state["authenticated"] = True
+        st.session_state["user"] = {
+            "name": "Dr. Sarah Chen",
+            "email": "sarah.chen@deepresearch.ai",
+            "picture": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=100",
+            "role": "Lead Research Fellow",
+            "id_token": "mocked_jwt_token_google_oauth2_xyz123"
+        }
+        
+    # Clear parameters to clean up browser address bar URL
+    st.query_params.clear()
+    st.rerun()
 
-st.title("🔬 AI Research Assistant")
-st.caption("Enter a topic → AI searches the web → returns a structured summary")
-st.divider()
+# --- SIGN OUT FUNCTION ---
+# Wipes user session states and reruns to trigger login card view
+def sign_out():
+    st.session_state["authenticated"] = False
+    st.session_state["user"] = None
+    # Wipe past search records on logout
+    if "result" in st.session_state:
+        del st.session_state["result"]
+    st.rerun()
 
-col1, col2 = st.columns([4, 1])
-with col1:
-    topic = st.text_input("Topic", placeholder="e.g. quantum computing breakthroughs 2025", label_visibility="collapsed")
-with col2:
-    go = st.button("Research ↗", type="primary", use_container_width=True)
-
-st.caption("Try: `AI chip wars 2025`  |  `CRISPR gene therapy`  |  `India startup funding 2025`")
-st.divider()
-
-if go and topic:
-    with st.spinner("Searching and generating summary..."):
-        result = call_api(topic)
-    if result:
-        st.session_state["result"] = result
-
-if "result" in st.session_state:
-    r = st.session_state["result"]
-    st.subheader(f"Topic: {r['topic']}")
-    st.metric("Sources used", r["source_count"])
-    st.markdown(r["summary"])
-
-    st.sidebar.header("Sources")
-    for i, s in enumerate(r["sources"], 1):
-        with st.sidebar.expander(f"Source {i}"):
-            st.write(f"**{s['title']}**")
-            st.write(s["url"])
-            st.write(s["snippet"][:200] + "...")
-
-    with st.expander("Raw JSON"):
-        st.json(r)
+# --- STEP 2: ORCHESTRATE VIEWS ---
+if not st.session_state["authenticated"]:
+    # Render Login portal
+    render_login_page(GOOGLE_CLIENT_ID, REDIRECT_URI)
 else:
-    st.info("Enter a topic above to get started.")
+    # Render Research Dashboard
+    render_dashboard(API_URL, sign_out)
